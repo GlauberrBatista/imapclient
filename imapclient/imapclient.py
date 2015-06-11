@@ -84,6 +84,10 @@ class IMAPClient(object):
     ``False``). This is useful for exotic connection or authentication
     setups.
 
+    If *read_timeout* is set, any read operations will raise a timeout after
+    the given time. Note that the ``idle_check()`` method still uses the given
+    timeout.
+
     Additional keyword arguments are passed through to the constructor
     of the :py:class:`imaplib.IMAP4` class, or
     :py:class:`imaplib.IMAP4_SSL` when *ssl* is ``True`` (these are
@@ -123,7 +127,7 @@ class IMAPClient(object):
     ReadOnlyError = imaplib.IMAP4.readonly
 
     def __init__(self, host, port=None, use_uid=True, ssl=False, stream=False,
-                 **kwargs):
+                 read_timeout=None, **kwargs):
         if stream:
             if port is not None:
                 raise ValueError("can't set 'port' when 'stream' True")
@@ -140,11 +144,23 @@ class IMAPClient(object):
         self.folder_encode = True
         self.log_file = sys.stderr
         self.normalise_times = True
+        self.read_timeout = read_timeout
 
         self._cached_capabilities = None
         self._imap = self._create_IMAP4(**kwargs)
         self._imap._mesg = self._log    # patch in custom debug log method
         self._idle_tag = None
+        self._set_read_timeout()
+
+    @property
+    def _sock(self):
+        # In py2, imaplib has sslobj (for SSL connections), and sock for non-SSL.
+        # In the py3 version it's just sock.
+        return getattr(self._imap, 'sslobj', self._imap.sock)
+
+    def _set_read_timeout(self):
+        if self.read_timeout:
+            self._sock.settimeout(self.read_timeout)
 
     def _create_IMAP4(self, **kwargs):
         # Create the IMAP instance in a separate method to make unit tests easier
@@ -486,9 +502,7 @@ class IMAPClient(object):
              (1, b'EXISTS'),
              (1, b'FETCH', (b'FLAGS', (b'\\NotJunk',)))]
         """
-        # In py2, imaplib has sslobj (for SSL connections), and sock for non-SSL.
-        # In the py3 version it's just sock.
-        sock = getattr(self._imap, 'sslobj', self._imap.sock)
+        sock = self._sock
 
         # make the socket non-blocking so the timeout can be
         # implemented for this call
@@ -515,6 +529,7 @@ class IMAPClient(object):
             return resps
         finally:
             sock.setblocking(1)
+            self._set_read_timeout()
 
     def idle_done(self):
         """Take the server out of IDLE mode.
