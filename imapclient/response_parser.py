@@ -28,6 +28,11 @@ xrange = six.moves.xrange
 __all__ = ['parse_response', 'parse_message_list', 'ParseError']
 
 
+# HACK for quick UID parsing
+import re
+simple_parse_uids = re.compile('^[0-9 ]+$')
+
+
 class ParseError(ValueError):
     pass
 
@@ -39,6 +44,14 @@ def parse_response(data):
     """
     if data == [None]:
         return []
+
+    # HACK for quick UID parsing (["1 2 3 ..."])
+    try:
+        if len(data) == 1 and simple_parse_uids.match(data[0]):
+            return tuple(int(n) for n in data[0].split(' ') if n)
+    except TypeError: # data is None or data[0] is not a string
+        pass
+
     return tuple(gen_parsed_response(data))
 
 
