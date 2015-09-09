@@ -564,16 +564,15 @@ class IMAPClient(object):
             what = normalise_text_list(what)
         what_ = '(%s)' % (' '.join(what))
 
-        # Workaround for imaplib bug with folders that contain special
-        # characters, such as quotes.
         typ, data = self._imap.status(self._normalise_folder(folder), what_)
         self._checkok('status', typ, data)
-        if len(data) == 2:
-            data = '%s %s' % (self._normalise_folder(data[0][1]), data[1])
-        else:
-            data = data[0]
 
-        _, status_items = parse_response([data])
+        parsed = parse_response([data[0]])
+        if len(parsed) == 1:
+            # Workaround for imaplib bug with folders that contain special
+            # characters, such as quotes.
+            parsed =  parse_response(['%s %s' % (self._normalise_folder(data[0][1]), data[1])])
+        _, status_items = parsed
         return dict(as_pairs(status_items))
 
     def close_folder(self):
